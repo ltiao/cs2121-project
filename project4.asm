@@ -306,10 +306,10 @@ compute_loop:
 ld counter2, X
 adiw X, LENGTH
 ld counter3, X
-sbiw X, 1
-ld r20, X
-adiw X, 1
 sbiw X, LENGTH-1
+ld r20, X
+;adiw X, LENGTH-1
+;sbiw X, LENGTH-1
 
 cpi counter2, '0'
 brsh out1
@@ -326,41 +326,43 @@ out1:
 cpi counter3, '0'
 brsh same_space
 
-cpi r20, '0'
-brsh adjacent
+;cpi r20, '0'
+;brsh adjacent
 
 st Y+, counter2
 rjmp cont
 
 out2:
-ld r20, X
+;ld r20, X
 cpi r20, '0'
-brsh kill
+brsh adjacent
+;st Y+, counter3
+;rjmp cont
+;kill:
+;ldi r20, 32
 st Y+, counter3
-rjmp cont
-kill:
-ldi r20, 32
-st Y+, r20
 rjmp cont
 
 adjacent:
-ldi temp, 32
-st Y+, temp
-cp counter2, r20
+cp counter3, r20
 breq neutralize_all_adj
-sbiw X, 1
+;ldi temp, 32
+st Y+, counter3
+;adiw X, 1
 ldi temp, 32
 st X, temp
-adiw X, 1
+;sbiw X, 1
 rjmp cont
 
 neutralize_all_adj:
-sbiw X, 1
+ldi temp, 32
+st Y+, temp
+;sbiw X, 1
 ldi temp, 32
 st X, temp
 adiw X, LENGTH-1
 st X, temp
-sbiw X, LENGTH-2
+sbiw X, LENGTH-1
 rjmp cont
 
 same_space:
