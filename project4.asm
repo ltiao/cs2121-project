@@ -48,8 +48,10 @@
 .dseg
 bases:  .byte 1
 level:	.byte 1
-score:	.byte 2
 shots_fired: .byte 1
+probability: .byte 1
+score:	.byte 2
+timestep:	.byte 1
 RAND:	.byte 4
 player: .byte 14
 cpu: 	.byte 14
@@ -128,11 +130,22 @@ st X, temp
 ldi temp, 0
 ldi XL, low(score)
 ldi XH, high(score)
+st X+, temp
 st X, temp
 
 ldi temp, 0
 ldi XL, low(shots_fired)
 ldi XH, high(shots_fired)
+st X, temp
+
+ldi temp, 80
+ldi XL, low(probability)
+ldi XH, high(probability)
+st X, temp
+
+ldi temp, 35
+ldi XL, low(timestep)
+ldi XH, high(timestep)
 st X, temp
 
 rcall initRandom
@@ -162,10 +175,15 @@ push r24                 ; Prologue ends.
 
 /**** a counter for 3597 is needed to get one second-- Three counters are used in this example **************/                                          
                          ; 3597  (1 interrupt 278microseconds therefore 3597 interrupts needed for 1 sec)
-cpi counter, 97          ; counting for 97
+;cpi counter, 97          ; counting for 97
+cpi counter, 50
 brne notsecond
- 
-cpi counter2, 35         ; counting for 35
+
+ldi XL, low(timestep)
+ldi XH, high(timestep)
+ld r20, X
+;cpi counter2, 35         ; counting for 35
+cp counter2, r20
 brne secondloop          ; jumPINC into count 100 
 
 
@@ -212,6 +230,16 @@ ldi XL, low(player)        ; point Y at the string
 ldi XH, high(player) 
 st X, data
 
+rjmp shit1
+
+notsecond:
+rjmp notsecond1
+
+secondloop:
+rjmp secondloop1
+
+shit1:
+
 ;Left Shift Player Array
 		ldi YL, low(cpu)
 		ldi YH, high(cpu)
@@ -238,10 +266,14 @@ st X, data
 cpi r20, '0'
 brsh no_fire
 
+ldi XL, low(probability)
+ldi XH, high(probability)
+ld r20, X
+
 ; otherwise, get a random number between 0 and 80.
 random_loop:
 rcall getRandom
-cpi temp, 80
+cp temp, r20
 brsh random_loop
 
 ; if the random number lies between 0 and 9 inclusive, fire. else don't fire. 
@@ -256,15 +288,20 @@ fire:
 ldi XL, low(shots_fired)
 ldi XH, high(shots_fired)
 ld r20, X
-cpi r20, hurdle-1
+;cpi r20, hurdle-1
+cpi r20, 3
 brsh survived
 inc r20
 st X, r20
 rjmp battle
 survived:
+
 ;Reset shots fired
 ldi r20, 0
 st X, r20
+
+rcall level_up
+
 ;Increase Level
 ldi XL, low(level)
 ldi XH, high(level)
@@ -272,13 +309,24 @@ ld r20, X
 inc r20
 st X, r20
 
-;Update Score
-;ldi XL, low(score)
-;ldi XH, high(score)
+ldi XL, low(timestep)
+ldi XH, high(timestep)
+ld r20, X
+subi r20, 3
+st X, r20
 
-;ld r20, X
-;inc r20
-;st X, r20
+ldi XL, low(probability)
+ldi XH, high(probability)
+ld r20, X
+cpi r20, 15
+brlo constant
+subi r20, 15
+st X, r20
+rjmp battle
+constant:
+ldi r20, 15
+st X, r20
+
 battle:
 
 ldi data, '0'
@@ -292,11 +340,11 @@ st X, data
 
 rjmp shit
 
-notsecond:
-rjmp notsecond1
+notsecond1:
+rjmp notsecond2
 
-secondloop:
-rjmp secondloop1
+secondloop1:
+rjmp secondloop2
 
 shit:
 /*
@@ -401,7 +449,7 @@ ldi YL, low(state)
 ldi YH, high(state)
 
 ldi counter, LENGTH
-compute_loop:
+compute_loop1:
 ld counter2, X
 adiw X, LENGTH
 ld counter3, X
@@ -431,6 +479,11 @@ brsh adjacent
 st Y+, counter2
 rjmp cont
 
+rjmp skip_intermediate
+compute_loop:
+rjmp compute_loop1
+skip_intermediate:
+
 out2:
 ld r20, X
 cpi r20, '0'
@@ -451,6 +504,9 @@ sbiw X, 1
 ldi temp, 32
 st X, temp
 adiw X, 1
+
+rcall wrong_countermeasure
+
 rjmp cont
 
 neutralize_all_adj:
@@ -460,6 +516,9 @@ st X, temp
 adiw X, LENGTH-1
 st X, temp
 sbiw X, LENGTH-2
+
+rcall correct_countermeasure
+
 rjmp cont
 
 same_space:
@@ -473,6 +532,9 @@ sbiw X, 1
 ldi temp, 32
 st X, temp
 adiw X, 1
+
+rcall wrong_countermeasure
+
 rjmp cont
 
 neutralize_all:
@@ -482,6 +544,8 @@ st X, temp
 adiw X, LENGTH
 st X, temp
 sbiw X, LENGTH-1
+
+rcall correct_countermeasure
 
 cont:
 dec counter
@@ -535,8 +599,8 @@ ldi data, 'F'
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi XL, low(shots_fired)
-ldi XH, high(shots_fired)
+ldi XL, low(timestep)
+ldi XH, high(timestep)
 ld temp, X
 rcall display_integer
 
@@ -561,11 +625,16 @@ ldi data, 'S'
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi XL, low(score)
-ldi XH, high(score)
+;rcall display_score
+
+ldi XL, low(probability)
+ldi XH, high(probability)
 ld temp, X
 rcall display_integer
 
+ldi data, '0'
+rcall lcd_wait_busy
+rcall lcd_write_data
 ;ldi data, '0'
 ;add data, temp
 ;rcall lcd_wait_busy
@@ -632,10 +701,10 @@ ldi counter3, 0
 
 rjmp exit        ; go to exit
 
-notsecond1: inc counter   ; if it is not a second, increment the counter
+notsecond2: inc counter   ; if it is not a second, increment the counter
            rjmp exit
 
-secondloop1: inc counter3 ; counting 100 for every 35 times := 35*100 := 3500
+secondloop2: inc counter3 ; counting 100 for every 35 times := 35*100 := 3500
             cpi counter3,100 
             brne exit
 	    inc counter2
@@ -1053,7 +1122,143 @@ ldi XH, high(score)
 ld temp, X
 rcall display_integer
 
+ldi data, '0'
+rcall lcd_wait_busy
+rcall lcd_write_data
+
 pop counter
 pop r31
 pop r30
+ret
+
+correct_countermeasure:
+push r28
+push r29
+push r20
+push r16
+push r17
+
+;ldi r17, 10
+; a silly compensation for my lack of ability to display 4-digit integers
+ldi r17, 1
+
+ldi YL, low(level)
+ldi YH, high(level)
+ld r20, Y
+
+ldi YL, low(score)
+ldi YH, high(score)
+ld temp, Y
+mul r20, r17
+add temp, r0
+st Y+, temp
+ld temp, Y
+adc temp, r1
+st Y, temp
+
+pop r17
+pop r16
+pop r20
+pop r29
+pop r28
+ret
+
+wrong_countermeasure:
+push r28
+push r29
+push r20
+push r16
+push r17
+
+;ldi r17, 10
+; a silly compensation for my lack of ability to display 4-digit integers
+ldi r17, 1
+
+ldi YL, low(level)
+ldi YH, high(level)
+ld r20, Y
+
+ldi YL, low(score)
+ldi YH, high(score)
+ld temp, Y
+mul r20, r17
+sub temp, r0
+st Y+, temp
+ld temp, Y
+sbc temp, r1
+st Y, temp
+/*
+
+ldi YL, low(level)
+ldi YH, high(level)
+ld r20, Y
+
+ldi YL, low(score)
+ldi YH, high(score)
+ld temp, Y
+sub temp, r20
+st Y, temp
+*/
+pop r17
+pop r16
+pop r20
+pop r29
+pop r28
+ret
+
+level_up:
+push r28
+push r29
+push r20
+push r16
+push r17
+
+;ldi r17, 100
+ldi r17, 10 ; a silly compensation for my lack of ability to display 4-digit integers
+
+ldi YL, low(level)
+ldi YH, high(level)
+ld r20, Y
+mul r20, r17
+
+ldi YL, low(score)
+ldi YH, high(score)
+ld temp, Y
+add temp, r0
+st Y+, temp
+ld temp, Y
+adc temp, r1
+st Y, temp
+
+pop r17
+pop r16
+pop r20
+pop r29
+pop r28
+ret
+
+display_score:
+push r28
+push r29
+push r20
+push r16
+push r17
+push data
+
+ldi data, '0'
+
+; high byte of score
+ldi YL, low(score+1)
+ldi YH, high(score+1)
+ld r20, Y
+add data, r20
+rcall lcd_wait_busy
+rcall lcd_write_data
+
+pop data
+pop r17
+pop r16
+pop r20
+pop r29
+pop r28
 ret
