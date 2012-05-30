@@ -138,7 +138,8 @@ ldi XL, low(shots_fired)
 ldi XH, high(shots_fired)
 st X, temp
 
-ldi temp, 80
+;ldi temp, 80
+ldi temp, 50
 ldi XL, low(probability)
 ldi XH, high(probability)
 st X, temp
@@ -182,6 +183,14 @@ brne notsecond
 ldi XL, low(timestep)
 ldi XH, high(timestep)
 ld r20, X
+cpi r20, 1
+brlo time_lower_bound
+rjmp time_count
+time_lower_bound:
+ldi r20, 1
+st X, r20
+
+time_count:
 ;cpi counter2, 35         ; counting for 35
 cp counter2, r20
 brne secondloop          ; jumPINC into count 100 
@@ -269,6 +278,12 @@ brsh no_fire
 ldi XL, low(probability)
 ldi XH, high(probability)
 ld r20, X
+cpi r20, 15
+brlo prob_lower_bound
+rjmp random_loop
+prob_lower_bound:
+ldi r20, 15
+st X, r20
 
 ; otherwise, get a random number between 0 and 80.
 random_loop:
@@ -318,14 +333,14 @@ st X, r20
 ldi XL, low(probability)
 ldi XH, high(probability)
 ld r20, X
-cpi r20, 15
-brlo constant
+;cpi r20, 20
+;brlo constant
 subi r20, 15
 st X, r20
-rjmp battle
-constant:
-ldi r20, 15
-st X, r20
+;rjmp battle
+;constant:
+;ldi r20, 15
+;st X, r20
 
 battle:
 
