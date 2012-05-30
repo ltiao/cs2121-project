@@ -199,7 +199,7 @@ st X, data
 		ldi YL, low(cpu)
 		ldi YH, high(cpu)
 
-		ldd r20, Y+13
+		ldd r20, Y+13 ;check if a weapon was fired on the last round
 
 		ldi counter, LENGTH
 		First:
@@ -217,14 +217,18 @@ st X, data
 		dec counter
 		brne First
 
+; if a weapon was fired on the last round, do not fire.
 cpi r20, '0'
 brsh no_fire
 
+; otherwise, get a random number between 0 and 40.
 random_loop:
 rcall getRandom
 cpi temp, 40
 brsh random_loop
 
+; if the random number lies between 0 and 9 inclusive, fire. else don't fire. 
+; thus, probability of firing a weapon on a timestep is 1/4
 cpi temp, 10
 brlo fire
 no_fire:
