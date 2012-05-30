@@ -333,12 +333,19 @@ st Y+, counter2
 rjmp cont
 
 out2:
+ld r20, X
+cpi r20, '0'
+brsh kill
 st Y+, counter3
+rjmp cont
+kill:
+ldi r20, 32
+st Y+, r20
 rjmp cont
 
 adjacent:
-;ldi temp, 32
-;st Y+, temp
+ldi temp, 32
+st Y+, temp
 cp counter2, r20
 breq neutralize_all_adj
 sbiw X, 1
@@ -409,7 +416,7 @@ rcall lcd_write_data
         rcall lcd_wait_busy
         ldi data, LCD_ADDR_SET | LCD_LINE2
         rcall lcd_write_com                     ; move the insertion point to start of line 2
-
+/*
 ldi data, 'B'
 rcall lcd_wait_busy
 rcall lcd_write_data
@@ -445,16 +452,16 @@ ldi XL, low(score)
 ldi XH, high(score)
 ld temp, X
 rcall display_integer
-
+*/
 
 ;ldi data, '0'
 ;add data, temp
 ;rcall lcd_wait_busy
 ;rcall lcd_write_data
 
-/*
-ldi XL, low(cpu)
-ldi XH, high(cpu)
+
+ldi XL, low(player)
+ldi XH, high(player)
 
 ldi data, 'D'
 rcall lcd_wait_busy
@@ -472,7 +479,7 @@ display_loop2:
 ldi data, 'M'
 rcall lcd_wait_busy
 rcall lcd_write_data
-*/
+
 ;        ldi counter, LENGTH                       ; initialise counter 
 ;        ldi data, '1'                           ; initialise character to '1' 
 
