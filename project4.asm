@@ -75,6 +75,10 @@ jmp Default ; Timer1 Overflow Handler
 jmp Default ; Timer0 Compare Handler
 jmp Timer0  ; Timer0 Overflow Handler
 
+;.org 0x100
+game_over_string: .db "Game Over!"
+final_score_string: .db "Final Score:"
+
 DEFAULT:
 reti
 
@@ -106,12 +110,12 @@ out TIMSK, temp          ; T/C0 interrupt enable
 
 ldi r16, 1 << CS10 ;Start timer
 out TCCR1B, r16
-
-rcall initRandom
+;ldi temp, 1<<TOIE1
+;out TIMSK, temp
 
 rcall lcd_init
 
-ldi temp, 9
+ldi temp, 3
 ldi XL, low(bases)
 ldi XH, high(bases)
 st X, temp
@@ -130,6 +134,8 @@ ldi temp, 0
 ldi XL, low(shots_fired)
 ldi XH, high(shots_fired)
 st X, temp
+
+rcall initRandom
 
 ; Initialize Array
 		ldi temp, ' '
@@ -162,6 +168,17 @@ brne notsecond
 cpi counter2, 35         ; counting for 35
 brne secondloop          ; jumPINC into count 100 
 
+
+ldi XL, low(bases)
+ldi XH, high(bases)
+
+ld r20, X
+cpi r20, 0
+brne continue_game
+rcall game_over
+rjmp end
+continue_game:
+
 ;Start
 
 	subi data, -'0' ; Add 48 to data
@@ -184,7 +201,7 @@ brne secondloop          ; jumPINC into count 100
 		ldi YH, high(player+13)       ; recall that we must multiply any Program code label address
 
 		ldi counter, LENGTH
-		Second: 
+		Second:
 		ld temp, -Y
 		std Y+1, temp
 		dec counter
@@ -221,14 +238,14 @@ st X, data
 cpi r20, '0'
 brsh no_fire
 
-; otherwise, get a random number between 0 and 40.
+; otherwise, get a random number between 0 and 80.
 random_loop:
 rcall getRandom
-cpi temp, 40
+cpi temp, 80
 brsh random_loop
 
 ; if the random number lies between 0 and 9 inclusive, fire. else don't fire. 
-; thus, probability of firing a weapon on a timestep is 1/4
+; thus, probability of firing a weapon on a timestep is 1/8
 cpi temp, 10
 brlo fire
 no_fire:
@@ -236,12 +253,11 @@ ldi data, 32
 rjmp push_array
 
 fire:
-/*
 ldi XL, low(shots_fired)
 ldi XH, high(shots_fired)
 ld r20, X
-cpi r20, 15
-breq survived
+cpi r20, hurdle-1
+brsh survived
 inc r20
 st X, r20
 rjmp battle
@@ -253,18 +269,6 @@ st X, r20
 ldi XL, low(level)
 ldi XH, high(level)
 ld r20, X
-ldi counter3, 100
-mul r20, counter3
-add r20, r0
-adc r21, r1
-
-ldi YL, low(score)
-ldi YH, high(score)
-st Y+, r20
-st Y, r21
-
-ld r20, X
-
 inc r20
 st X, r20
 
@@ -276,7 +280,7 @@ st X, r20
 ;inc r20
 ;st X, r20
 battle:
-*/
+
 ldi data, '0'
 add data, temp
 
@@ -295,7 +299,7 @@ secondloop:
 rjmp secondloop1
 
 shit:
-
+/*
 ldi XL, low(player)
 ldi XH, high(player)
 ldi YL, low(state)
@@ -389,6 +393,99 @@ sbiw X, LENGTH-1
 cont:
 dec counter
 brne compute_loop
+*/
+
+ldi XL, low(player)
+ldi XH, high(player)
+ldi YL, low(state)
+ldi YH, high(state)
+
+ldi counter, LENGTH
+compute_loop:
+ld counter2, X
+adiw X, LENGTH
+ld counter3, X
+sbiw X, 1
+ld r20, X
+adiw X, 1
+sbiw X, LENGTH-1
+
+cpi counter2, '0'
+brsh out1
+
+cpi counter3, '0'
+brsh out2
+
+;else
+ldi temp, 32
+st Y+, temp
+rjmp cont
+
+out1:
+cpi counter3, '0'
+brsh same_space
+
+cpi r20, '0'
+brsh adjacent
+
+st Y+, counter2
+rjmp cont
+
+out2:
+ld r20, X
+cpi r20, '0'
+brsh kill
+st Y+, counter3
+rjmp cont
+kill:
+ldi r20, 32
+st Y+, r20
+rjmp cont
+
+adjacent:
+ldi temp, 32
+st Y+, temp
+cp counter2, r20
+breq neutralize_all_adj
+sbiw X, 1
+ldi temp, 32
+st X, temp
+adiw X, 1
+rjmp cont
+
+neutralize_all_adj:
+sbiw X, 1
+ldi temp, 32
+st X, temp
+adiw X, LENGTH-1
+st X, temp
+sbiw X, LENGTH-2
+rjmp cont
+
+same_space:
+ldi temp, '*'
+st Y+, temp
+
+cp counter2, counter3
+breq neutralize_all
+
+sbiw X, 1
+ldi temp, 32
+st X, temp
+adiw X, 1
+rjmp cont
+
+neutralize_all:
+sbiw X, 1
+ldi temp, 32
+st X, temp
+adiw X, LENGTH
+st X, temp
+sbiw X, LENGTH-1
+
+cont:
+dec counter
+brne compute_loop
 
 ;Display Array
 ldi counter, LENGTH               ; initialise counter 
@@ -399,6 +496,8 @@ ldi XL, low(state)
 ldi XH, high(state)
 
 rcall lcd_init
+
+;rcall game_over
 
 ldi data, 'D'
 rcall lcd_wait_busy
@@ -418,7 +517,7 @@ rcall lcd_write_data
         rcall lcd_wait_busy
         ldi data, LCD_ADDR_SET | LCD_LINE2
         rcall lcd_write_com                     ; move the insertion point to start of line 2
-/*
+
 ldi data, 'B'
 rcall lcd_wait_busy
 rcall lcd_write_data
@@ -427,6 +526,10 @@ ldi XL, low(bases)
 ldi XH, high(bases)
 ld temp, X
 rcall display_integer
+
+ldi data, ' '
+rcall lcd_wait_busy
+rcall lcd_write_data
 
 ldi data, 'F'
 rcall lcd_wait_busy
@@ -437,6 +540,10 @@ ldi XH, high(shots_fired)
 ld temp, X
 rcall display_integer
 
+ldi data, ' '
+rcall lcd_wait_busy
+rcall lcd_write_data
+
 ldi data, 'L'
 rcall lcd_wait_busy
 rcall lcd_write_data
@@ -446,6 +553,10 @@ ldi XH, high(level)
 ld temp, X
 rcall display_integer
 
+ldi data, ' '
+rcall lcd_wait_busy
+rcall lcd_write_data
+
 ldi data, 'S'
 rcall lcd_wait_busy
 rcall lcd_write_data
@@ -454,14 +565,13 @@ ldi XL, low(score)
 ldi XH, high(score)
 ld temp, X
 rcall display_integer
-*/
 
 ;ldi data, '0'
 ;add data, temp
 ;rcall lcd_wait_busy
 ;rcall lcd_write_data
 
-
+/*
 ldi XL, low(player)
 ldi XH, high(player)
 
@@ -481,6 +591,7 @@ display_loop2:
 ldi data, 'M'
 rcall lcd_wait_busy
 rcall lcd_write_data
+*/
 
 ;        ldi counter, LENGTH                       ; initialise counter 
 ;        ldi data, '1'                           ; initialise character to '1' 
@@ -619,6 +730,9 @@ mov data, temp
 ;rcall change_speed
 ;out PORTC, speed
 ret ; return to caller
+
+end:
+	rjmp end
 
 ;Function lcd_write_com: Write a command to the LCD. The data reg stores the value to be written.
 lcd_write_com:
@@ -899,4 +1013,47 @@ rcall lcd_write_data
 
 pop del_lo
 pop del_hi
+ret
+
+game_over:
+push r30
+push r31
+push counter
+
+rcall lcd_init
+
+        ldi ZL, low(game_over_string << 1)        ; point Y at the string
+        ldi ZH, high(game_over_string << 1)       ; recall that we must multiply any Program code label address
+                                        ; by 2 to get the correct location
+        ldi counter, 10               ; initialise counter 
+game_over_loop: 
+        lpm data, Z+                    ; read a character from the string 
+        rcall lcd_wait_busy
+        rcall lcd_write_data            ; write the character to the screen
+        dec counter                       ; decrement character counter
+        brne game_over_loop                  ; loop again if there are more characters
+
+        rcall lcd_wait_busy
+        ldi data, LCD_ADDR_SET | LCD_LINE2
+        rcall lcd_write_com                     ; move the insertion point to start of line 2
+
+        ldi ZL, low(final_score_string << 1)        ; point Y at the string
+        ldi ZH, high(final_score_string << 1)       ; recall that we must multiply any Program code label address
+                                        ; by 2 to get the correct location
+        ldi counter, 12               ; initialise counter 
+final_score_loop: 
+        lpm data, Z+                    ; read a character from the string 
+        rcall lcd_wait_busy
+        rcall lcd_write_data            ; write the character to the screen
+        dec counter                       ; decrement character counter
+        brne final_score_loop                  ; loop again if there are more characters
+
+ldi XL, low(score)
+ldi XH, high(score)
+ld temp, X
+rcall display_integer
+
+pop counter
+pop r31
+pop r30
 ret
