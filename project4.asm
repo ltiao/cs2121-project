@@ -44,7 +44,7 @@
 .equ LCD_LINE2 = 0x40
 .equ LENGTH = 14
 .equ hurdle = 15
-.equ FREQ2=255 ; will generate 1200 Hz
+.equ FREQ2=255
 
 .dseg
 bases:  .byte 1
@@ -53,6 +53,7 @@ shots_fired: .byte 1
 probability: .byte 1
 score:	.byte 2
 timestep:	.byte 1
+game_started: .byte 1
 RAND:	.byte 4
 player: .byte 14
 cpu: 	.byte 14
@@ -65,8 +66,8 @@ jmp Default ; IRQ0 Handler
 jmp Default ; IRQ1 Handler
 jmp Default ; IRQ2 Handler
 jmp Default ; IRQ3 Handler
-jmp Default ; IRQ4 Handler
-jmp Default ; IRQ5 Handler
+jmp EXT_INT4 ; IRQ4 Handler
+jmp EXT_INT5 ; IRQ5 Handler
 jmp Default ; IRQ6 Handler
 jmp Default ; IRQ7 Handler
 jmp Default ; Timer2 Compare Handler
@@ -81,6 +82,9 @@ jmp Timer0  ; Timer0 Overflow Handler
 ;.org 0x100
 game_over_string: .db "Game Over!"
 final_score_string: .db "Final Score:"
+start_game_string1: .db "Press PB0 to    "
+start_game_string2: .db "begin battle!   "
+
 
 DEFAULT:
 reti
@@ -126,7 +130,14 @@ ser temp
 ldi temp, FREQ2
 out OCR2, temp
 
+ldi temp, (2 << ISC40) | (2 << ISC50) ;setting the interrupts for falling edge
+sts EICRA, temp                       ;storing them into EICRA 
+in temp, EIMSK                        ;taking the values inside the EIMSK  
+ori temp, (1<<INT4) | (1<<INT5)       ; oring the values with INT0 and INT1  
+out EIMSK, temp                       ; enabling interrput0 and interrupt1
+
 rcall lcd_init
+rcall start_screen
 
 ldi temp, 3
 ldi XL, low(bases)
@@ -145,12 +156,17 @@ st X+, temp
 st X, temp
 
 ldi temp, 0
+ldi XL, low(game_started)
+ldi XH, high(game_started)
+st X, temp
+
+ldi temp, 0
 ldi XL, low(shots_fired)
 ldi XH, high(shots_fired)
 st X, temp
 
-;ldi temp, 80
-ldi temp, 50
+ldi temp, 80
+;ldi temp, 50
 ldi XL, low(probability)
 ldi XH, high(probability)
 st X, temp
@@ -174,9 +190,53 @@ rcall initRandom
 		dec counter
 		brne init_array
 
+ldi data, -16
+
 sei
 jmp main
 
+; Start Game
+EXT_INT4:
+push temp
+in temp, SREG
+push temp
+
+rcall level_up
+
+pop temp
+out SREG, temp
+pop temp
+reti
+
+; Next Level
+EXT_INT5:
+push temp
+in temp, SREG
+push temp
+push r17
+push r28
+push r29
+
+ldi YL, low(game_started)
+ldi YH, high(game_started)
+ld r17, Y
+cpi r17, 1
+breq already_begun
+ldi r17, 1
+st Y, r17
+rjmp exit_int5
+already_begun:
+;rcall level_up
+
+exit_int5:
+
+pop r29
+pop r28
+pop r17
+pop temp
+out SREG, temp
+pop temp
+reti
 
 Timer0:                  ; Prologue starts.
 push r20
@@ -194,17 +254,18 @@ brne notsecond
 ldi XL, low(timestep)
 ldi XH, high(timestep)
 ld r20, X
-cpi r20, 1
-brlo time_lower_bound
-rjmp time_count
-time_lower_bound:
-ldi r20, 1
-st X, r20
 
-time_count:
 ;cpi counter2, 35         ; counting for 35
 cp counter2, r20
 brne secondloop          ; jumPINC into count 100 
+
+ldi XL, low(game_started)
+ldi XH, high(game_started)
+ld r20, X
+cpi r20, 1
+breq begin_game
+rjmp dont_kill_base
+begin_game:
 
 ldi XL, low(bases)
 ldi XH, high(bases)
@@ -218,7 +279,7 @@ continue_game:
 
 ;Start
 
-	subi data, -'0' ; Add 48 to data
+subi data, -'0' ; Add 48 to data
 
 ; Update Array
 ;		ldi XL, low(array)        ; point Y at the string
@@ -288,12 +349,6 @@ brsh no_fire
 ldi XL, low(probability)
 ldi XH, high(probability)
 ld r20, X
-cpi r20, 15
-brlo prob_lower_bound
-rjmp random_loop
-prob_lower_bound:
-ldi r20, 15
-st X, r20
 
 ; otherwise, get a random number between 0 and 80.
 random_loop:
@@ -313,46 +368,15 @@ fire:
 ldi XL, low(shots_fired)
 ldi XH, high(shots_fired)
 ld r20, X
-;cpi r20, hurdle-1
-cpi r20, 3
+cpi r20, hurdle-1
+;cpi r20, 3
 brsh survived
 inc r20
 st X, r20
 rjmp battle
 survived:
 
-;Reset shots fired
-ldi r20, 0
-st X, r20
-
 rcall level_up
-
-;Increase Level
-ldi XL, low(level)
-ldi XH, high(level)
-ld r20, X
-inc r20
-st X, r20
-
-rcall sound
-
-ldi XL, low(timestep)
-ldi XH, high(timestep)
-ld r20, X
-subi r20, 3
-st X, r20
-
-ldi XL, low(probability)
-ldi XH, high(probability)
-ld r20, X
-;cpi r20, 20
-;brlo constant
-subi r20, 15
-st X, r20
-;rjmp battle
-;constant:
-;ldi r20, 15
-;st X, r20
 
 battle:
 
@@ -615,26 +639,29 @@ rcall lcd_write_data
 
 ldi XL, low(bases)
 ldi XH, high(bases)
+;ldi XL, low(game_started)
+;ldi XH, high(game_started)
+
 ld temp, X
 rcall display_integer
 
 ldi data, ' '
 rcall lcd_wait_busy
 rcall lcd_write_data
-
+/*
 ldi data, 'F'
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi XL, low(timestep)
-ldi XH, high(timestep)
+ldi XL, low(shots_fired)
+ldi XH, high(shots_fired)
 ld temp, X
 rcall display_integer
 
 ldi data, ' '
 rcall lcd_wait_busy
 rcall lcd_write_data
-
+*/
 ldi data, 'L'
 rcall lcd_wait_busy
 rcall lcd_write_data
@@ -654,8 +681,8 @@ rcall lcd_write_data
 
 ;rcall display_score
 
-ldi XL, low(probability)
-ldi XH, high(probability)
+ldi XL, low(score)
+ldi XH, high(score)
 ld temp, X
 rcall display_integer
 
@@ -1116,7 +1143,7 @@ push r30
 push r31
 push counter
 
-cli
+;cli
 
 rcall lcd_init
 
@@ -1162,6 +1189,46 @@ pop r31
 pop r30
 ret
 
+start_screen:
+push r30
+push r31
+push counter
+
+;cli
+
+rcall lcd_init
+
+        ldi ZL, low(start_game_string1 << 1)        ; point Y at the string
+        ldi ZH, high(start_game_string1 << 1)       ; recall that we must multiply any Program code label address
+                                        ; by 2 to get the correct location
+        ldi counter, 16               ; initialise counter 
+start_screen_loop1: 
+        lpm data, Z+                    ; read a character from the string 
+        rcall lcd_wait_busy
+        rcall lcd_write_data            ; write the character to the screen
+        dec counter                       ; decrement character counter
+        brne start_screen_loop1                  ; loop again if there are more characters
+
+        rcall lcd_wait_busy
+        ldi data, LCD_ADDR_SET | LCD_LINE2
+        rcall lcd_write_com                     ; move the insertion point to start of line 2
+
+        ldi ZL, low(start_game_string2 << 1)        ; point Y at the string
+        ldi ZH, high(start_game_string2 << 1)       ; recall that we must multiply any Program code label address
+                                        ; by 2 to get the correct location
+        ldi counter, 16               ; initialise counter 
+start_screen_loop2: 
+        lpm data, Z+                    ; read a character from the string 
+        rcall lcd_wait_busy
+        rcall lcd_write_data            ; write the character to the screen
+        dec counter                       ; decrement character counter
+        brne start_screen_loop2                 ; loop again if there are more characters
+
+pop counter
+pop r31
+pop r30
+ret
+
 correct_countermeasure:
 push r28
 push r29
@@ -1182,7 +1249,15 @@ ldi YH, high(score)
 ld temp, Y
 mul r20, r17
 add temp, r0
+brvs score_upperbound1
 st Y+, temp
+rjmp score_continue1 
+score_upperbound1:
+ldi temp, 255
+st Y+, temp
+score_continue1:
+
+;st Y+, temp
 ld temp, Y
 adc temp, r1
 st Y, temp
@@ -1214,10 +1289,23 @@ ldi YH, high(score)
 ld temp, Y
 mul r20, r17
 sub temp, r0
+
+cpi temp, 1
+brge decrease_score
+ldi temp, 0
+st Y, temp
+rjmp score_continue
+decrease_score:
+st Y, temp
+
+score_continue:
+
 st Y+, temp
 ld temp, Y
 sbc temp, r1
 st Y, temp
+
+
 /*
 
 ldi YL, low(level)
@@ -1244,6 +1332,8 @@ push r20
 push r16
 push r17
 
+;Update Score
+
 ;ldi r17, 100
 ldi r17, 10 ; a silly compensation for my lack of ability to display 4-digit integers
 
@@ -1256,37 +1346,80 @@ ldi YL, low(score)
 ldi YH, high(score)
 ld temp, Y
 add temp, r0
+;st Y+, temp
+;cpi temp, 255
+brvs score_upperbound2
 st Y+, temp
+rjmp score_continue2 
+score_upperbound2:
+ldi temp, 255
+st Y+, temp
+
+score_continue2:
+
 ld temp, Y
 adc temp, r1
 st Y, temp
 
-pop r17
-pop r16
-pop r20
-pop r29
-pop r28
-ret
-
-display_score:
-push r28
-push r29
-push r20
-push r16
-push r17
-push data
-
-ldi data, '0'
-
-; high byte of score
-ldi YL, low(score+1)
-ldi YH, high(score+1)
+;Reset shots fired
+ldi YL, low(shots_fired)
+ldi YH, high(shots_fired)
 ld r20, Y
-add data, r20
-rcall lcd_wait_busy
-rcall lcd_write_data
+ldi r20, 0
+st Y, r20
 
-pop data
+;Rebuild bases
+ldi YL, low(bases)
+ldi YH, high(bases)
+ld r20, Y
+inc r20
+cpi r20, 3
+brsh bases_upper_bound
+st Y, r20
+rjmp bases_continue
+bases_upper_bound:
+ldi r20, 3
+st Y, r20
+
+bases_continue:
+
+;Increase Level
+ldi YL, low(level)
+ldi YH, high(level)
+ld r20, Y
+inc r20
+st Y, r20
+
+ldi YL, low(timestep)
+ldi YH, high(timestep)
+ld r20, Y
+subi r20, 3
+cpi r20, 5
+brge decrease_time
+ldi r20, 2
+st Y, r20
+rjmp time_continue
+decrease_time:
+st Y, r20
+
+time_continue:
+
+ldi YL, low(probability)
+ldi YH, high(probability)
+ld r20, Y
+subi r20, 15
+cpi r20, 20
+brsh increase_probability
+ldi r20, 15
+st Y, r20
+rjmp prob_continue
+increase_probability:
+st Y, r20
+
+prob_continue:
+
+rcall sound
+
 pop r17
 pop r16
 pop r20
@@ -1296,15 +1429,41 @@ ret
 
 sound:
 push temp
+push r17
 ;ser temp
 
 ldi temp, 0b00000000
-;clr temp
 out PORTB, temp
 
-ldi del_hi, high(1000000)
-ldi del_lo, low(1000000)
+ldi r17, 3
+sound_loop:
+ldi del_hi, 0xFF;high(9000000)
+ldi del_lo, 0xFF;low(9000000)
 rcall delay
+dec r17
+brne sound_loop
+
+ldi temp, FREQ2-50
+out OCR2, temp
+
+ldi r17, 3
+sound_loop2:
+ldi del_hi, 0xFF;high(9000000)
+ldi del_lo, 0xFF;low(9000000)
+rcall delay
+dec r17
+brne sound_loop2
+
+ldi temp, FREQ2
+out OCR2, temp
+
+ldi r17, 3
+sound_loop3:
+ldi del_hi, 0xFF;high(9000000)
+ldi del_lo, 0xFF;low(9000000)
+rcall delay
+dec r17
+brne sound_loop3
 
 ldi temp, 0b00000010
 out PORTB, temp
@@ -1312,6 +1471,7 @@ out PORTB, temp
 ;clr temp
 ;out PORTB, temp
 
+pop r17
 pop temp
 ret
 
@@ -1323,7 +1483,7 @@ push r17
 ldi temp, 0b00000011
 out PORTB, temp
 
-ldi r17, 35
+ldi r17, 30
 motor_loop:
 ldi del_hi, 0xFF;high(9000000)
 ldi del_lo, 0xFF;low(9000000)
