@@ -54,6 +54,7 @@ probability: .byte 1
 score:	.byte 2
 timestep:	.byte 1
 game_started: .byte 1
+shockwave: .byte 1
 RAND:	.byte 4
 player: .byte 14
 cpu: 	.byte 14
@@ -158,6 +159,11 @@ st X, temp
 ldi temp, 0
 ldi XL, low(game_started)
 ldi XH, high(game_started)
+st X, temp
+
+ldi temp, 0
+ldi XL, low(shockwave)
+ldi XH, high(shockwave)
 st X, temp
 
 ldi temp, 0
@@ -305,10 +311,17 @@ subi data, -'0' ; Add 48 to data
 		dec counter
 		brne Second
 
-;Push element onto array
-ldi XL, low(player)        ; point Y at the string
-ldi XH, high(player) 
-st X, data
+ldi XL, low(shockwave)
+ldi XH, high(shockwave)
+ld r20, X
+cpi r20, 1
+brge player_no_fire
+rjmp shit1
+player_no_fire:
+;ldi r20, 0
+dec r20
+st X, r20
+ldi data, ' '
 
 rjmp shit1
 
@@ -319,6 +332,11 @@ secondloop:
 rjmp secondloop1
 
 shit1:
+
+;Push element onto array
+ldi XL, low(player)        ; point Y at the string
+ldi XH, high(player) 
+st X, data
 
 ;Left Shift Player Array
 		ldi YL, low(cpu)
@@ -1275,6 +1293,12 @@ push r29
 push r20
 push r16
 push r17
+
+ldi YL, low(shockwave)
+ldi YH, high(shockwave)
+ld r20, Y
+ldi r20, 2
+st Y, r20
 
 ;ldi r17, 10
 ; a silly compensation for my lack of ability to display 4-digit integers
