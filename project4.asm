@@ -44,6 +44,7 @@
 .equ LCD_LINE2 = 0x40
 .equ LENGTH = 14
 .equ hurdle = 15
+.equ FREQ2=255 ; will generate 1200 Hz
 
 .dseg
 bases:  .byte 1
@@ -104,6 +105,10 @@ out DDRC, temp
 ldi temp,255
 out DDRB,temp
 ;ldi speed, 255
+;ldi temp, 0b11000000
+;clr temp
+ldi temp, 0b00000010
+out PORTB, temp
 
 ldi temp, 0b00000010     ; 
 out TCCR0, temp          ; Prescaling value=8  ;256*8/7.3728( Frequency of the clock 7.3728MHz, for the overflow it should go for 256 times)
@@ -114,6 +119,12 @@ ldi r16, 1 << CS10 ;Start timer
 out TCCR1B, r16
 ;ldi temp, 1<<TOIE1
 ;out TIMSK, temp
+
+ldi temp, (1 << WGM21) | (1 << COM20) | (3 << CS20); CTC moded, toggle OC2, prescalar = 64
+out TCCR2, temp
+ser temp
+ldi temp, FREQ2
+out OCR2, temp
 
 rcall lcd_init
 
@@ -194,7 +205,6 @@ time_count:
 ;cpi counter2, 35         ; counting for 35
 cp counter2, r20
 brne secondloop          ; jumPINC into count 100 
-
 
 ldi XL, low(bases)
 ldi XH, high(bases)
@@ -323,6 +333,8 @@ ldi XH, high(level)
 ld r20, X
 inc r20
 st X, r20
+
+rcall sound
 
 ldi XL, low(timestep)
 ldi XH, high(timestep)
@@ -1104,6 +1116,8 @@ push r30
 push r31
 push counter
 
+cli
+
 rcall lcd_init
 
         ldi ZL, low(game_over_string << 1)        ; point Y at the string
@@ -1140,6 +1154,8 @@ rcall display_integer
 ldi data, '0'
 rcall lcd_wait_busy
 rcall lcd_write_data
+
+rcall motor
 
 pop counter
 pop r31
@@ -1276,4 +1292,48 @@ pop r16
 pop r20
 pop r29
 pop r28
+ret
+
+sound:
+push temp
+;ser temp
+
+ldi temp, 0b00000000
+;clr temp
+out PORTB, temp
+
+ldi del_hi, high(1000000)
+ldi del_lo, low(1000000)
+rcall delay
+
+ldi temp, 0b00000010
+out PORTB, temp
+
+;clr temp
+;out PORTB, temp
+
+pop temp
+ret
+
+motor:
+push temp
+push r17
+;ser temp
+
+ldi temp, 0b00000011
+out PORTB, temp
+
+ldi r17, 35
+motor_loop:
+ldi del_hi, 0xFF;high(9000000)
+ldi del_lo, 0xFF;low(9000000)
+rcall delay
+dec r17
+brne motor_loop
+
+ldi temp, 0b00000010
+out PORTB, temp
+
+pop r17
+pop temp
 ret
